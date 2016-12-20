@@ -5,6 +5,7 @@ import imp
 import lucidity
 import ftrack_api
 
+# Ignore PEP8, importing to have available on module level
 from .template import Template
 
 
@@ -131,7 +132,7 @@ def format(data, templates, entity=None,
     valid_templates = []
     for template in templates:
         try:
-            path = template.format(data)
+            path = os.path.abspath(template.format(data))
         except lucidity.error.FormatError:
             continue
         else:
