@@ -66,10 +66,8 @@ def recurse_attribute_list(entity, attribute_list, padding=3, result=None):
     return result
 
 
-def get_entity_data(entity, keys):
+def get_entity_parents(entity):
 
-    # Collect parents from entity
-    entity_data = {}
     items = []
 
     if isinstance(entity, ftrack_api.entity.component.Component):
@@ -80,8 +78,20 @@ def get_entity_data(entity, keys):
     if "link" in entity.keys():
         items = entity["link"]
 
+    parents = []
     for item in items[:-1]:
-        parent = entity.session.get(item["type"], item["id"])
+        parents.append(entity.session.get(item["type"], item["id"]))
+
+    return parents
+
+
+def get_entity_data(entity, keys):
+
+    # Collect parents from entity
+    entity_data = {}
+    items = []
+
+    for parent in get_entity_parents(entity):
         context_type = type(parent).entity_type.lower()
         entity_data[context_type] = parent
 
@@ -121,8 +131,7 @@ def get_entity_data(entity, keys):
     return data
 
 
-def format(data, templates, entity=None,
-           return_mode="best_match"):  # @ReservedAssignment
+def get_plausible_templates(data, templates, entity):
 
     keys = set()
     for template in templates:
@@ -138,11 +147,35 @@ def format(data, templates, entity=None,
         else:
             valid_templates.append((path, template))
 
-    if valid_templates:
+    return valid_templates
+
+
+def get_valid_templates(entity, templates):
+
+    plausible_templates = get_plausible_templates({}, templates, entity)
+    template_length = 0
+    for template in plausible_templates:
+        if len(template[1].keys()) > template_length:
+            template_length = len(template[1].keys())
+
+    results = []
+    for template in plausible_templates:
+        if len(template[1].keys()) == template_length:
+            results.append(template)
+
+    return results
+
+
+# @ReservedAssignment
+def format(data, templates, entity, return_mode="best_match"):
+
+    plausible_templates = get_plausible_templates(data, templates, entity)
+
+    if plausible_templates:
         if return_mode == "best_match":
             match_count = 0
             best_match = None
-            for template in valid_templates:
+            for template in plausible_templates:
                 if match_count < len(template[1].keys()):
                     match_count = len(template[1].keys())
                     best_match = template
@@ -151,7 +184,14 @@ def format(data, templates, entity=None,
                 return best_match
 
         if return_mode == "all":
-            return valid_templates
+
+            results = []
+            entities = get_entity_parents(entity) + [entity]
+            for entity in entities:
+                results += get_valid_templates(entity, templates)
+
+            if results:
+                return results
 
     raise lucidity.error.FormatError(
         'Data {0!r} was not formattable by any of the supplied templates.'
